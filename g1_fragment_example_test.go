@@ -73,6 +73,9 @@ func TestFragmentExample(t *testing.T) {
 	near(t, "camera lens axis", inWorld("camera", r3.Vector{Z: 1000}).Sub(cam), r3.Vector{X: 674.3, Z: -738.5})
 	near(t, "camera image right", inWorld("camera", r3.Vector{X: 1000}).Sub(cam), r3.Vector{Y: -1000})
 
+	// torso_link (-3.96, 0, 847) -> imu_in_torso (-39.59, -2.24, 137.92)
+	near(t, "torso imu", inWorld("torso-imu", r3.Vector{}), r3.Vector{X: -43.55, Y: -2.24, Z: 984.92})
+
 	// With straight legs the 60 mm tall foot boxes stand on z = 0.
 	geoms, err := referenceframe.FrameSystemGeometriesLinearInputs(fs, in)
 	if err != nil {

@@ -123,6 +123,12 @@ typedef struct {
 extern const dds_topic_descriptor_t unitree_hg_lowcmd_desc;
 extern const dds_topic_descriptor_t unitree_hg_lowstate_desc;
 
+/* unitree_hg::msg::dds_::IMUState_ published on its own: the G1 torso IMU
+ * ("rt/secondary_imu", plus a 20Hz copy on "rt/lf/secondary_imu"), published
+ * by the locomotion computer. Same layout as LowState_.imu_state, which is the
+ * pelvis IMU. The message has no timestamp field. */
+extern const dds_topic_descriptor_t unitree_hg_imustate_desc;
+
 /* unitree_hg::msg::dds_::BmsState_ — battery management state. Published on
  * the G1 at "rt/lf/bmsstate" (the hg LowState has no battery field). Fields
  * and order match unitree_sdk2 include/unitree/idl/hg/BmsState_.hpp.
@@ -264,6 +270,7 @@ void unitree_response_free(unitree_response_t *resp);
      1 = unitree_hg LowState (G1 low-level state)
      2 = unitree_go SportModeState (G1 odometer)
      3 = unitree_hg BmsState (G1 battery, "rt/lf/bmsstate")
+     4 = unitree_hg IMUState (G1 torso IMU, "rt/secondary_imu")
    Returns 0 on success and writes the reader handle to *reader_out. */
 int unitree_dds_subscribe(const char *topic_name, int topic_type,
                           dds_entity_t *reader_out);
@@ -292,6 +299,13 @@ int unitree_dds_take_sport_mode_state(dds_entity_t reader, int timeout_ms,
    Returns 0 on success; the caller can read out directly (no allocations). */
 int unitree_dds_take_bmsstate(dds_entity_t reader, int timeout_ms,
                               unitree_hg_bms_state_t *out);
+
+/* Take the latest IMUState_ from a reader created with topic_type=4.
+   Returns 0 on success. *source_ts_ns receives the DDS source timestamp
+   (publisher's clock, ns since the Unix epoch) since the message has none. */
+int unitree_dds_take_imustate(dds_entity_t reader, int timeout_ms,
+                              unitree_hg_imu_state_t *out,
+                              int64_t *source_ts_ns);
 
 /* Enumerate every remote publication (writer) the participant has discovered.
    Writes newline-separated "topic_name|type_name" entries into buf (NUL

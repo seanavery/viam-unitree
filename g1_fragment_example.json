@@ -65,6 +65,13 @@
       }
     },
     {
+      "name": "torso-imu",
+      "api": "rdk:component:movement_sensor",
+      "model": "erh:viam-unitree:g1-imu",
+      "attributes": {},
+      "frame": { "parent": "body", "translation": { "x": -39.59, "y": -2.24, "z": 137.92 } }
+    },
+    {
       "name": "odometry",
       "api": "rdk:component:movement_sensor",
       "model": "erh:viam-unitree:g1-movementsensor",

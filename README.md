@@ -12,6 +12,7 @@ Viam module for the Unitree G1 humanoid robot.
 - [`erh:viam-unitree:g1-right-arm`](erh_viam-unitree_g1-arm.md) - Right arm joint control via arm_sdk
 - [`erh:viam-unitree:g1-body`](erh_viam-unitree_g1-body.md) - Read-only pelvis/legs/waist kinematics; parent of the arms in the frame system
 - [`erh:viam-unitree:g1-movementsensor`](erh_viam-unitree_g1-movementsensor.md) - Odometer movement sensor (pose, velocity, orientation)
+- [`erh:viam-unitree:g1-imu`](erh_viam-unitree_g1-imu.md) - Torso IMU movement sensor (orientation, angular velocity, acceleration of the upper body and head)
 
 ## Example fragment
 
@@ -25,7 +26,8 @@ world
     │   ├── left-arm     torso_link → left palm
     │   ├── right-arm    torso_link → right palm
     │   ├── camera       head camera (d435_link), optical frame: z out of the lens, x right
-    │   └── lidar        mid360_link
+    │   ├── lidar        mid360_link
+    │   └── torso-imu    imu_in_torso
     └── odometry         at the pelvis
 ```
 

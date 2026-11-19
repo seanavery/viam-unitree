@@ -997,3 +997,125 @@ func (c *BmsClient) Close() {
 	c.reader = 0
 	c.mu.Unlock()
 }
+
+// IMUState is a snapshot of a standalone unitree_hg IMUState_ sample, e.g. the
+// G1 torso IMU on "rt/secondary_imu". Units are as published: gyro rad/s,
+// accel m/s^2 (gravity included), rpy rad, temperature deg C.
+type IMUState struct {
+	Quaternion  [4]float32 // w, x, y, z
+	Gyro        [3]float32
+	Accel       [3]float32
+	RPY         [3]float32 // roll, pitch, yaw
+	Temperature int16
+	// SourceTime is the DDS source timestamp (publisher's clock); the message
+	// itself carries no time. ReceivedAt is when this process took the sample.
+	SourceTime time.Time
+	ReceivedAt time.Time
+}
+
+// IMUClient subscribes to a unitree_hg IMUState_ topic and caches the latest
+// sample on a background poller (same pattern as OdometerClient).
+type IMUClient struct {
+	mu     sync.Mutex
+	reader C.dds_entity_t
+	closed bool
+
+	latest  IMUState
+	hasData atomic.Bool
+	samples atomic.Uint64
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
+}
+
+// NewIMUClient subscribes to topic (e.g. "rt/secondary_imu") and starts a poller.
+func NewIMUClient(topic string) (*IMUClient, error) {
+	cTopic := C.CString(topic)
+	defer C.free(unsafe.Pointer(cTopic))
+
+	var reader C.dds_entity_t
+	rc := C.unitree_dds_subscribe(cTopic, 4 /* IMUState */, &reader)
+	if rc != 0 {
+		return nil, fmt.Errorf("subscribe to %q failed (rc=%d)", topic, rc)
+	}
+
+	c := &IMUClient{reader: reader, stopCh: make(chan struct{})}
+	c.wg.Add(1)
+	go c.poll()
+	return c, nil
+}
+
+func (c *IMUClient) poll() {
+	defer c.wg.Done()
+	ticker := time.NewTicker(2 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+		}
+
+		var raw C.unitree_hg_imu_state_t
+		var srcTS C.int64_t
+		if rc := C.unitree_dds_take_imustate(c.reader, 0, &raw, &srcTS); rc != 0 {
+			continue
+		}
+
+		st := IMUState{
+			Temperature: int16(raw.temperature),
+			SourceTime:  time.Unix(0, int64(srcTS)),
+			ReceivedAt:  time.Now(),
+		}
+		for i := 0; i < 3; i++ {
+			st.Gyro[i] = float32(raw.gyroscope[i])
+			st.Accel[i] = float32(raw.accelerometer[i])
+			st.RPY[i] = float32(raw.rpy[i])
+		}
+		for i := 0; i < 4; i++ {
+			st.Quaternion[i] = float32(raw.quaternion[i])
+		}
+
+		c.mu.Lock()
+		c.latest = st
+		c.hasData.Store(true)
+		c.mu.Unlock()
+		c.samples.Add(1)
+	}
+}
+
+// Latest returns the most recent IMU sample.
+func (c *IMUClient) Latest() (IMUState, error) {
+	if !c.hasData.Load() {
+		return IMUState{}, fmt.Errorf("no IMU data received yet")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.latest, nil
+}
+
+// Samples returns how many samples the poller has taken since subscribing.
+// The reader keeps only the newest sample, so at publish rates above the
+// 500Hz poll rate this undercounts.
+func (c *IMUClient) Samples() uint64 {
+	return c.samples.Load()
+}
+
+func (c *IMUClient) Close() {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
+	c.closed = true
+	reader := c.reader
+	c.mu.Unlock()
+
+	close(c.stopCh)
+	c.wg.Wait()
+	C.unitree_dds_close_subscriber(reader)
+
+	c.mu.Lock()
+	c.reader = 0
+	c.mu.Unlock()
+}
