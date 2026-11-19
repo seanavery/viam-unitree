@@ -25,5 +25,6 @@ func main() {
 		resource.APIModel{API: arm.API, Model: g1RightArmModel},
 		resource.APIModel{API: arm.API, Model: g1BodyModel},
 		resource.APIModel{API: movementsensor.API, Model: g1MovementSensorModel},
+		resource.APIModel{API: movementsensor.API, Model: g1IMUModel},
 	)
 }

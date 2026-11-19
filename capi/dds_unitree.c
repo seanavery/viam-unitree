@@ -254,6 +254,37 @@ const dds_topic_descriptor_t unitree_hg_lowstate_desc = {
     .m_meta = ""
 };
 
+/* --- unitree_hg::msg::dds_::IMUState_ descriptor ---
+ *
+ * Standalone IMU message (G1 torso IMU on "rt/secondary_imu"). Same fields
+ * as the imu_state block inside LowState_ above.
+ */
+static const uint32_t unitree_hg_imustate_ops[] = {
+    /*  0 */ DDS_OP_ADR | DDS_OP_TYPE_ARR | DDS_OP_SUBTYPE_4BY,
+                offsetof(unitree_hg_imu_state_t, quaternion), 4u,
+    /*  3 */ DDS_OP_ADR | DDS_OP_TYPE_ARR | DDS_OP_SUBTYPE_4BY,
+                offsetof(unitree_hg_imu_state_t, gyroscope), 3u,
+    /*  6 */ DDS_OP_ADR | DDS_OP_TYPE_ARR | DDS_OP_SUBTYPE_4BY,
+                offsetof(unitree_hg_imu_state_t, accelerometer), 3u,
+    /*  9 */ DDS_OP_ADR | DDS_OP_TYPE_ARR | DDS_OP_SUBTYPE_4BY,
+                offsetof(unitree_hg_imu_state_t, rpy), 3u,
+    /* 12 */ DDS_OP_ADR | DDS_OP_TYPE_2BY | DDS_OP_FLAG_SGN,
+                offsetof(unitree_hg_imu_state_t, temperature),
+    /* 14 */ DDS_OP_RTS
+};
+
+const dds_topic_descriptor_t unitree_hg_imustate_desc = {
+    .m_size = sizeof(unitree_hg_imu_state_t),
+    .m_align = sizeof(float),
+    .m_flagset = DDS_TOPIC_NO_OPTIMIZE,
+    .m_nkeys = 0u,
+    .m_typename = "unitree_hg::msg::dds_::IMUState_",
+    .m_keys = NULL,
+    .m_nops = sizeof(unitree_hg_imustate_ops) / sizeof(uint32_t),
+    .m_ops = unitree_hg_imustate_ops,
+    .m_meta = ""
+};
+
 /* --- unitree_hg::msg::dds_::BmsState_ descriptor ---
  *
  * Battery management state (topic "rt/lf/bmsstate"). All fields are scalars
@@ -546,6 +577,7 @@ int unitree_dds_subscribe(const char *topic_name, int topic_type,
         case 1: desc = &unitree_hg_lowstate_desc; break;
         case 2: desc = &unitree_go_sport_mode_state_desc; break;
         case 3: desc = &unitree_hg_bmsstate_desc; break;
+        case 4: desc = &unitree_hg_imustate_desc; break;
         default: return -1;
     }
 
@@ -830,6 +862,38 @@ int unitree_dds_take_bmsstate(dds_entity_t reader, int timeout_ms,
     }
 
     memcpy(out, samples[0], sizeof(*out));
+    dds_return_loan(reader, samples, 1);
+    return 0;
+}
+
+int unitree_dds_take_imustate(dds_entity_t reader, int timeout_ms,
+                              unitree_hg_imu_state_t *out,
+                              int64_t *source_ts_ns) {
+    void *samples[1] = { NULL };
+    dds_sample_info_t infos[1];
+
+    dds_duration_t timeout = DDS_MSECS(timeout_ms);
+    dds_entity_t ws = dds_create_waitset(g_participant);
+    dds_entity_t cond = dds_create_readcondition(reader, DDS_ANY_STATE);
+    dds_waitset_attach(ws, cond, 0);
+
+    dds_return_t rc = dds_waitset_wait(ws, NULL, 0, timeout);
+    dds_waitset_detach(ws, cond);
+    dds_delete(cond);
+    dds_delete(ws);
+
+    if (rc <= 0)
+        return -1;
+
+    rc = dds_take(reader, samples, infos, 1, 1);
+    if (rc <= 0 || !infos[0].valid_data) {
+        if (rc > 0) dds_return_loan(reader, samples, rc);
+        return -1;
+    }
+
+    memcpy(out, samples[0], sizeof(*out));
+    if (source_ts_ns)
+        *source_ts_ns = infos[0].source_timestamp;
     dds_return_loan(reader, samples, 1);
     return 0;
 }
